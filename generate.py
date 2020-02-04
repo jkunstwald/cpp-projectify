@@ -39,6 +39,9 @@ def create_cmakelists(filepath, project_name : str, flags_linux : str, flags_msv
         f.write('cmake_minimum_required(VERSION 3.8)\n')
         f.write('project(' + project_name + ')\n\n')
         f.write("""
+
+include(cmake/UnityBuild.cmake)
+
 # ===============================================
 # global settings
 
@@ -49,10 +52,10 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 # ===============================================
 # options
 
-option({0}_ENABLE_ASAN "if true, enables clang/MSVC address sanitizer" OFF)
-option({0}_ENABLE_MSAN "if true, enables clang/MSVC memory sanitizer" OFF)
-option({0}_ENABLE_UBSAN "if true, enables clang/MSVC undefined behaviour sanitizer" OFF)
-option({0}_ENABLE_TSAN "if true, enables clang/MSVC thread sanitizer" OFF)
+option({0}_ENABLE_ASAN "Enables clang/MSVC address sanitizer" OFF)
+option({0}_ENABLE_MSAN "Enables clang/MSVC memory sanitizer" OFF)
+option({0}_ENABLE_UBSAN "Enables clang/MSVC undefined behaviour sanitizer" OFF)
+option({0}_ENABLE_TSAN "Enables clang/MSVC thread sanitizer" OFF)
 
 if ({0}_ENABLE_ASAN AND {0}_ENABLE_TSAN)
     message(FATAL_ERROR "Can only enable one of TSan or ASan at a time")
@@ -61,8 +64,8 @@ if ({0}_ENABLE_ASAN AND {0}_ENABLE_MSAN)
     message(FATAL_ERROR "Can only enable one of ASan or MSan at a time")
 endif()
 
-option({0}_ENABLE_WERROR "if true, enables -Werror, /WX" OFF)
-
+option({0}_ENABLE_WERROR "Enables -Werror, /WX" OFF)
+option({0}_ENABLE_UNITY_BUILD "If enabled, compiles this executable as a single compilation unit" OFF)
 
 # ===============================================
 # compiler and linker flags
@@ -117,23 +120,21 @@ else()
     endif()
 endif()
 
+# ===============================================
+# Bin dir
+if(MSVC)
+    set(BIN_DIR ${{CMAKE_SOURCE_DIR}}/bin)
+elseif(CMAKE_BUILD_TYPE STREQUAL "")
+    set(BIN_DIR ${{CMAKE_SOURCE_DIR}}/bin/Default)
+else()
+    set(BIN_DIR ${{CMAKE_SOURCE_DIR}}/bin/${{CMAKE_BUILD_TYPE}})
+endif()
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${{BIN_DIR}})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${{BIN_DIR}})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${{BIN_DIR}})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${{BIN_DIR}})
+
         """.format(project_caps_prefix, flags_linux, flags_msvc))
-        f.write('\n')
-        f.write('# ===============================================\n')
-        f.write('# Bin dir\n')
-        f.write('if(MSVC)\n')
-        f.write('    set(BIN_DIR ${CMAKE_SOURCE_DIR}/bin)\n')
-        f.write('elseif(CMAKE_BUILD_TYPE STREQUAL "")\n')
-        f.write('    set(BIN_DIR ${CMAKE_SOURCE_DIR}/bin/Default)\n')
-        f.write('else()\n')
-        f.write(
-            '    set(BIN_DIR ${CMAKE_SOURCE_DIR}/bin/${CMAKE_BUILD_TYPE})\n')
-        f.write('endif()\n')
-        f.write('set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${BIN_DIR})\n')
-        f.write('set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${BIN_DIR})\n')
-        f.write(
-            'set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${BIN_DIR})\n')
-        f.write('set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${BIN_DIR})\n')
 
         # GLOW needs a special bin directory
         if any(lib.name == "glow" for lib in enabled_libraries):
@@ -156,33 +157,45 @@ endif()
         for lib in enabled_libraries:
             f.write('add_subdirectory(extern/' + lib.name + ')\n')
 
-        f.write('\n')
-        f.write('# ===============================================\n')
-        f.write('# configure executable\n')
-        f.write('\n')
-        f.write('file(GLOB_RECURSE SOURCES\n')
-        f.write('    "src/*.cc"\n')
-        f.write('    "src/*.hh"\n')
-        f.write('    "src/*.cpp"\n')
-        f.write('    "src/*.h"\n')
-        f.write(')\n')
-        f.write('\n')
+        f.write("""
 
-        f.write('# group sources according to folder structure\n')
-        f.write(
-            'source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${SOURCES})\n')
+# ===============================================
+# configure executable
 
-        f.write("\n")
-        f.write('# ===============================================\n')
-        f.write('# add executable\n\n')
-        f.write('add_executable(${PROJECT_NAME} ${SOURCES})\n')
+file(GLOB_RECURSE SOURCES "src/*.cc" "src/*.cpp" "src/*.c")
+file(GLOB_RECURSE HEADERS "src/*.hh" "src/*.h" "src/*.inl")
+
+# group sources according to folder structure
+source_group(TREE "${{CMAKE_CURRENT_SOURCE_DIR}}/src" FILES ${{SOURCES}} ${{HEADERS}})
+
+if ({0}_ENABLE_UNITY_BUILD)
+    enable_unity_build(${{PROJECT_NAME}} SOURCES 150 cc)
+endif()
+
+add_executable(${{PROJECT_NAME}} ${{SOURCES}} ${{HEADERS}})
+
+target_include_directories(${{PROJECT_NAME}} PUBLIC "src/")
+target_compile_options(${{PROJECT_NAME}} PUBLIC ${{COMMON_COMPILER_FLAGS}})
+
+""".format(project_caps_prefix))
+
         f.write('target_link_libraries(${PROJECT_NAME} PUBLIC\n')
         for lib in enabled_libraries:
             f.write("    " + lib.name + "\n")
         f.write("    ${COMMON_LINKER_FLAGS}\n")
         f.write(')\n')
-        f.write('target_include_directories(${PROJECT_NAME} PUBLIC "src")\n')
-        f.write('target_compile_options(${PROJECT_NAME} PUBLIC ${COMMON_COMPILER_FLAGS})')
+
+def download_files(origin_url : str, project_name : str):
+    raw_data_download_url = origin_url
+    if "github" in origin_url:
+        # extract github raw domain
+        github_username = origin_url.split("/")[2].split(".")[0]
+        github_reponame = origin_url.split("/")[3]
+        raw_data_download_url = "https://raw.githubusercontent.com/{}/{}/master".format(github_username, github_reponame)
+
+    urllib.request.urlretrieve(raw_data_download_url + "/data/.clang-format", os.path.join(project_name, ".clang-format"))
+    urllib.request.urlretrieve(raw_data_download_url + "/data/.gitignore", os.path.join(project_name, ".gitignore"))
+    urllib.request.urlretrieve(raw_data_download_url + "/data/UnityBuild.cmake", os.path.join(project_name, "cmake/UnityBuild.cmake"))
 
 
 def get_enabled_libs(args):
@@ -200,6 +213,7 @@ def setup_project(args):
         print("Directory " + project_name + " already exists! Aborting!")
         return
 
+    # clone or init the repository
     if(project_url):
         call(["git", "clone", project_url, project_name])
     else:
@@ -207,29 +221,23 @@ def setup_project(args):
         os.mkdir(project_name)
         call(["git", "-C", project_name, "init"])
 
-    create_cmakelists(os.path.join(
-        project_name, "CMakeLists.txt"), project_name, args.flags_linux, args.flags_msvc, enabled_libs)
-
-    Path(os.path.join(project_name, "README.md")).touch()
-
-    # Download files
-    raw_data_download_url = origin_url
-    if "github" in origin_url:
-        # extract github raw domain
-        github_username = origin_url.split("/")[2].split(".")[0]
-        github_reponame = origin_url.split("/")[3]
-        raw_data_download_url = "https://raw.githubusercontent.com/{}/{}/master".format(github_username, github_reponame)
-
-    urllib.request.urlretrieve(raw_data_download_url + "/data/.clang-format", os.path.join(project_name, ".clang-format"))
-    urllib.request.urlretrieve(raw_data_download_url + "/data/.gitignore", os.path.join(project_name, ".gitignore"))
-
-
+    # create folders
     os.mkdir(os.path.join(project_name, "extern"))
     os.mkdir(os.path.join(project_name, "src"))
     os.mkdir(os.path.join(project_name, "bin"))
+    os.mkdir(os.path.join(project_name, "cmake"))
 
+    # create readme, main, cmakelists
+    Path(os.path.join(project_name, "README.md")).touch()
     create_main(os.path.join(project_name, 'src', 'main.cc'))
 
+    create_cmakelists(os.path.join(
+        project_name, "CMakeLists.txt"), project_name, args.flags_linux, args.flags_msvc, enabled_libs)
+
+    # download gitignore, clang-format, UnityBuild.cmake
+    download_files(origin_url, project_name)
+    
+    # add submodules
     for lib in enabled_libs:
         call(["git", "-C", os.path.join(project_name,
                                         "extern"), "submodule", "add", lib.git_url, lib.name])
