@@ -214,7 +214,7 @@ def setup_project(args):
 
     # Download files
     raw_data_download_url = origin_url
-    if not "localhost" in origin_url:
+    if "github" in origin_url:
         # extract github raw domain
         github_username = origin_url.split("/")[2].split(".")[0]
         github_reponame = origin_url.split("/")[3]
