@@ -41,6 +41,7 @@ def create_cmakelists(filepath, project_name : str, flags_linux : str, flags_msv
         f.write("""
 
 include(cmake/UnityBuild.cmake)
+include(cmake/SourceGroup.cmake)
 
 # ===============================================
 # global settings
@@ -165,11 +166,10 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${{BIN_DIR}})
 file(GLOB_RECURSE SOURCES "src/*.cc" "src/*.cpp" "src/*.c")
 file(GLOB_RECURSE HEADERS "src/*.hh" "src/*.h" "src/*.inl")
 
-# group sources according to folder structure
-source_group(TREE "${{CMAKE_CURRENT_SOURCE_DIR}}/src" FILES ${{SOURCES}} ${{HEADERS}})
+arcana_source_group(SOURCES HEADERS)
 
 if ({0}_ENABLE_UNITY_BUILD)
-    enable_unity_build(${{PROJECT_NAME}} SOURCES 150 cc)
+    arcana_enable_unity_build(${{PROJECT_NAME}} SOURCES 150 cc)
 endif()
 
 add_executable(${{PROJECT_NAME}} ${{SOURCES}} ${{HEADERS}})
@@ -196,6 +196,7 @@ def download_files(origin_url : str, project_name : str):
     urllib.request.urlretrieve(raw_data_download_url + "/data/.clang-format", os.path.join(project_name, ".clang-format"))
     urllib.request.urlretrieve(raw_data_download_url + "/data/.gitignore", os.path.join(project_name, ".gitignore"))
     urllib.request.urlretrieve(raw_data_download_url + "/data/UnityBuild.cmake", os.path.join(project_name, "cmake/UnityBuild.cmake"))
+    urllib.request.urlretrieve(raw_data_download_url + "/data/SourceGroup.cmake", os.path.join(project_name, "cmake/SourceGroup.cmake"))
 
 
 def get_enabled_libs(args):
