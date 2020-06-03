@@ -62,7 +62,8 @@
             "git_url": "git@github.com:project-arcana/sdl2-dev.git",
             "description": "SDL2 Standalone",
             "project_url": "https://github.com/project-arcana/sdl2-dev",
-            "dependencies": []
+            "dependencies": [],
+            "no_link_main": true
         },
         {
             "name": "dxc-wrapper",

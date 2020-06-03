@@ -39,7 +39,6 @@ def create_cmakelists(filepath, project_name : str, flags_linux : str, flags_msv
         f.write('cmake_minimum_required(VERSION 3.8)\n')
         f.write('project(' + project_name + ')\n\n')
         f.write("""
-
 include(cmake/UnityBuild.cmake)
 include(cmake/SourceGroup.cmake)
 
@@ -156,7 +155,10 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${{BIN_DIR}})
         f.write("# ===============================================\n")
         f.write("# add submodules\n")
         for lib in enabled_libraries:
-            f.write('add_subdirectory(extern/' + lib.name + ')\n')
+            f.write("""
+# {0}
+add_subdirectory(extern/{1})
+""".format(lib.description, lib.name))
 
         f.write("""
 
@@ -181,11 +183,14 @@ target_compile_options(${{PROJECT_NAME}} PUBLIC ${{COMMON_COMPILER_FLAGS}})
 
         f.write('target_link_libraries(${PROJECT_NAME} PUBLIC\n')
         for lib in enabled_libraries:
+            if hasattr(lib, "no_link_main"):
+                continue
             f.write("    " + lib.name + "\n")
+
         f.write("    ${COMMON_LINKER_FLAGS}\n")
         f.write(')\n')
 
-def download_files(origin_url : str, project_name : str):
+def download_files(origin_url : str, project_name : str, create_shader_folder : bool):
     raw_data_download_url = origin_url
     if "github" in origin_url:
         # extract github raw domain
@@ -197,6 +202,22 @@ def download_files(origin_url : str, project_name : str):
     urllib.request.urlretrieve(raw_data_download_url + "/data/.gitignore", os.path.join(project_name, ".gitignore"))
     urllib.request.urlretrieve(raw_data_download_url + "/data/UnityBuild.cmake", os.path.join(project_name, "cmake/UnityBuild.cmake"))
     urllib.request.urlretrieve(raw_data_download_url + "/data/SourceGroup.cmake", os.path.join(project_name, "cmake/SourceGroup.cmake"))
+
+    # folder structure for shader writing and compilation
+    if create_shader_folder:
+        # create folders
+        os.mkdir(os.path.join(project_name, "res"))
+        os.mkdir(os.path.join(project_name, "res/shader"))
+        os.mkdir(os.path.join(project_name, "res/shader/bin"))
+        os.mkdir(os.path.join(project_name, "res/shader/src"))
+        # download files
+        dl_url_shader = raw_data_download_url + "/data/shader_setup/"
+        urllib.request.urlretrieve(dl_url_shader + ".gitignore", os.path.join(project_name, "res/shader/.gitignore"))
+        urllib.request.urlretrieve(dl_url_shader + "bin/.gitignore", os.path.join(project_name, "res/shader/bin/.gitignore"))
+        urllib.request.urlretrieve(dl_url_shader + "src/imgui.hlsl", os.path.join(project_name, "res/shader/src/imgui.hlsl"))
+        urllib.request.urlretrieve(dl_url_shader + "shaderlist.txt", os.path.join(project_name, "res/shader/shaderlist.txt"))
+        urllib.request.urlretrieve(dl_url_shader + "shadertoolsconfig.json", os.path.join(project_name, "res/shader/shadertoolsconfig.json"))
+
 
 
 def get_enabled_libs(args):
@@ -235,8 +256,16 @@ def setup_project(args):
     create_cmakelists(os.path.join(
         project_name, "CMakeLists.txt"), project_name, args.flags_linux, args.flags_msvc, enabled_libs)
 
+
+    # determine if dxc-wrapper is enabled, if yes, create the shader folder skeleton below
+    is_dxc_enabled = False
+    for lib in enabled_libs:
+        if lib.name == "dxc-wrapper":
+            is_dxc_enabled = True
+            break
+
     # download gitignore, clang-format, UnityBuild.cmake
-    download_files(origin_url, project_name)
+    download_files(origin_url, project_name, is_dxc_enabled)
     
     # add submodules
     for lib in enabled_libs:

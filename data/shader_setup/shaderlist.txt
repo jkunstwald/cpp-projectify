@@ -1,0 +1,7 @@
+
+# shaderlist file for batch compilation using dxc-wrapper
+# syntax: [input file] [entrypoint] [type (vs/ps/gs/ds/hs/cs)] [output file without extension]
+
+# demo shader: imgui
+src/imgui.hlsl main_vs vs bin/imgui_vs
+src/imgui.hlsl main_ps ps bin/imgui_ps
